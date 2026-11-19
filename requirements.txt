@@ -7,3 +7,5 @@ torch
 tqdm
 python-dotenv
 pytest
+trl==0.12.0
+bitsandbytes

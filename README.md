@@ -50,7 +50,34 @@ This verifies:
 
 ---
 
-## 3. Running & Resuming Evaluations
+## 3. Correcting Sentences (Inference)
+
+You can correct any single sentence or enter an interactive terminal session:
+
+### Direct CLI Correction:
+```powershell
+.\venv\Scripts\python -m ocr_lora.infer "Mu1tiply 76S by 17 to get l3005."
+# Output: Multiply 765 by 17 to get 13005.
+```
+
+### Interactive Live Session:
+```powershell
+.\venv\Scripts\python -m ocr_lora.infer --interactive
+```
+
+### Use in Python Code:
+```python
+from ocr_lora.model import load_model_and_adapter
+from ocr_lora.infer import correct_text_batch
+
+model, tokenizer = load_model_and_adapter()
+predictions = correct_text_batch(model, tokenizer, ["2O2 − 6 = 196.", "Ful1 of the true..."])
+print(predictions)
+```
+
+---
+
+## 4. Running & Resuming Evaluations
 
 The evaluation harness implements safe atomic writes with `os.fsync` after each batch, never mutates the original checkpoint in `data/`, and writes to `outputs/ocr_eval_checkpoint.jsonl`.
 
@@ -88,7 +115,20 @@ Execute unit tests covering prompt formatting, corruption rules, and resumable s
 
 ---
 
-## 6. How to Share Safely
+## 6. Retraining (Optional)
+
+Retrain the LoRA adapter using `trl==0.12.0` `SFTTrainer` with 4-bit nf4 quantization on an NVIDIA GPU:
+
+```powershell
+.\venv\Scripts\python train.py --epochs 3 --batch-size 4 --grad-accum 2 --lr 2e-4
+```
+
+- **Output**: Trained adapter weights are saved strictly locally to `models/ocr-lora-retrained/`.
+- **Safety**: Adapters are **never** pushed to Hugging Face Hub unless `--push-to-hub` and `--repo-id <name>` are explicitly specified.
+
+---
+
+## 7. How to Share Safely
 
 Before sharing this repository:
 1. Ensure `.env` is absent (`.gitignore` protects it).

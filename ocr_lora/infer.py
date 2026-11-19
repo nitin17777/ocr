@@ -72,3 +72,46 @@ def correct_text_batch(
     decoded = tokenizer.batch_decode(new_tokens, skip_special_tokens=True)
 
     return [d.strip() for d in decoded]
+
+
+def main():
+    """CLI and interactive entrypoint for OCR correction."""
+    import argparse
+    from ocr_lora.model import load_model_and_adapter
+    from ocr_lora.config import DEFAULT_ADAPTER_ID, BASE_MODEL_ID
+
+    parser = argparse.ArgumentParser(description="OCR LoRA Correction Inference")
+    parser.add_argument("text", nargs="?", default=None, help="Input text with OCR errors to correct")
+    parser.add_argument("--adapter", type=str, default=DEFAULT_ADAPTER_ID, help="Adapter ID or path")
+    parser.add_argument("--base-model", type=str, default=BASE_MODEL_ID, help="Base model ID")
+    parser.add_argument("--interactive", "-i", action="store_true", help="Launch interactive prompt")
+    args = parser.parse_args()
+
+    print(f"Loading model ({args.base_model}) with adapter ({args.adapter})...")
+    model, tokenizer = load_model_and_adapter(
+        base_model_id=args.base_model,
+        adapter_id=args.adapter,
+    )
+    print("Model loaded successfully!\n")
+
+    if args.interactive or not args.text:
+        print("=== Interactive OCR Correction Mode ===")
+        print("Type any corrupted sentence and press Enter (or type 'exit' to quit):\n")
+        while True:
+            try:
+                user_input = input("OCR Input > ").strip()
+                if not user_input or user_input.lower() in ("exit", "quit"):
+                    break
+                corrected = correct_text_batch(model, tokenizer, [user_input])[0]
+                print(f"Corrected > {corrected}\n")
+            except (KeyboardInterrupt, EOFError):
+                break
+        print("Exiting.")
+    else:
+        corrected = correct_text_batch(model, tokenizer, [args.text])[0]
+        print(f"Input:     {args.text}")
+        print(f"Corrected: {corrected}")
+
+
+if __name__ == "__main__":
+    main()
