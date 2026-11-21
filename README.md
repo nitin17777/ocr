@@ -17,7 +17,8 @@ A local, reproducible Python framework to evaluate and benchmark the `deep1104/o
 | **Memory Stability** | **0.0 MB Delta** | In-place PEFT adapter swapping with zero VRAM leaks across 10+ swaps |
 | **Parameter Efficiency** | **~1.19%** | Fine-tunes only 18.4M parameters on top of the 1.54B Qwen2.5 base model |
 
-> 📊 **Full Evaluation & Efficiency Report**: Detailed domain stratifications, noise-level benchmarks, character confusion matrices, and ablation studies are available in **[BENCHMARKS.md](BENCHMARKS.md)**.
+> 📊 **Full Evaluation & Efficiency Report**: Detailed domain stratifications, noise-level benchmarks, character confusion matrices, and ablation studies are available in **[BENCHMARKS.md](BENCHMARKS.md)**.  
+> 📖 **Comprehensive Technical Documentation**: Complete system architecture, synthetic data pipeline, QLoRA training methodology, API reference, and failure mode analysis are available in **[DOCUMENTATION.md](DOCUMENTATION.md)**.
 
 ---
 
@@ -159,14 +160,19 @@ Before sharing this repository:
 A local web application providing an interactive correction interface, batched file processing with live Server-Sent Events (SSE), an evaluation analytics dashboard, and a LoRA fine-tuning subprocess manager with GPU safety guards.
 
 ### Running the Web Server
-Launch the server via the batch script:
+You can launch the entire web application using the short unified runner:
 ```cmd
-run_web.bat
+run
 ```
-Or with Uvicorn:
-```powershell
-.\venv\Scripts\python -m uvicorn webapp.main:app --host 127.0.0.1 --port 8000
-```
+*(In PowerShell: `.\run` or `run`)*
+
+Or run specific subcommands through the same shortcut:
+- `run` or `run web` — Start local web server (http://127.0.0.1:8000)
+- `run infer "text"` — Run CLI OCR correction on a single sentence
+- `run eval` — Run the resumable evaluation benchmark
+- `run train` — Launch LoRA fine-tuning subprocess
+- `run test` — Execute the 37-test automated test suite
+
 - **Web UI**: http://127.0.0.1:8000
 - **Interactive Swagger API Docs**: http://127.0.0.1:8000/docs
 - **Health API**: http://127.0.0.1:8000/api/health
