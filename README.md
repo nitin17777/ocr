@@ -2,6 +2,8 @@
 
 A local, reproducible Python framework to evaluate and benchmark the `deep1104/ocr-lora-large` LoRA adapter on `Qwen/Qwen2.5-1.5B-Instruct` for synthetic OCR error correction.
 
+> 📊 **Comprehensive Benchmarks & Efficiency Report**: Detailed evaluation metrics (90.70% overall, 98.41% math), VRAM profiles, latency measurements, and adapter ablation comparisons are documented in **[BENCHMARKS.md](BENCHMARKS.md)**.
+
 ---
 
 ## 1. Setup & Environment
