@@ -8,8 +8,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
 
 from webapp.config import settings
-from webapp.routers import system, correct
+from webapp.routers import system, correct, batch, analytics
 from webapp.services.model_manager import model_manager
+from webapp.services.batch_jobs import batch_manager
 
 
 @asynccontextmanager
@@ -17,9 +18,12 @@ async def lifespan(app: FastAPI):
     """Application lifespan context manager."""
     # Startup: ensure clean state without loading model
     assert model_manager.state == "unloaded", "Model must start in 'unloaded' state."
+    # Resume any pending or interrupted batch jobs
+    batch_manager.start_worker()
     yield
     # Shutdown: cleanly release GPU allocations
     await model_manager.unload()
+
 
 
 def create_app() -> FastAPI:
@@ -42,6 +46,9 @@ def create_app() -> FastAPI:
     # Register routers
     app.include_router(system.router)
     app.include_router(correct.router)
+    app.include_router(batch.router)
+    app.include_router(analytics.router)
+
 
     # Mount static assets
     static_dir = Path(__file__).parent / "static"

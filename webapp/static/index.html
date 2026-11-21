@@ -398,39 +398,821 @@
         </div>
 
         <!-- =================================================================== -->
-        <!-- TAB 2: BATCH (Placeholder)                                           -->
+        <!-- TAB 2: BATCH (Batch File Processing with SSE Progress & Export)      -->
         <!-- =================================================================== -->
-        <div x-show="activeTab === 'batch'" class="p-8 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm text-center">
-            <div class="w-12 h-12 mx-auto rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-500 mb-3">
-                <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                </svg>
+        <div x-show="activeTab === 'batch'" x-data="batchTab" class="space-y-6">
+
+            <!-- Drag & Drop Upload Zone + Adapter Settings -->
+            <div class="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm p-6">
+                
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 mb-4 border-b border-zinc-200 dark:border-zinc-800 gap-3">
+                    <div>
+                        <h2 class="text-base font-bold text-zinc-900 dark:text-zinc-100">Batch OCR Correction</h2>
+                        <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Upload a .txt, .csv, or .jsonl file to batch-correct text with live streaming progress.</p>
+                    </div>
+
+                    <!-- Adapter Dropdown -->
+                    <div class="flex items-center space-x-2">
+                        <label for="batchAdapterSelect" class="text-xs font-medium text-zinc-500 dark:text-zinc-400 whitespace-nowrap">
+                            LoRA Adapter:
+                        </label>
+                        <select 
+                            id="batchAdapterSelect"
+                            x-model="selectedAdapter"
+                            :disabled="isUploading || jobStatus === 'running'"
+                            class="text-xs rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 py-1.5 pl-3 pr-8 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <template x-for="ad in adapters" :key="'batch-ad-' + ad.name">
+                                <option :value="ad.name" x-text="ad.name"></option>
+                            </template>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Dropzone Box -->
+                <div 
+                    @dragover.prevent="isDragging = true"
+                    @dragleave.prevent="isDragging = false"
+                    @drop.prevent="handleFileDrop($event)"
+                    :class="isDragging ? 'border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/20' : 'border-zinc-300 dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-950/50'"
+                    class="border-2 border-dashed rounded-xl p-8 text-center transition-all">
+                    
+                    <input 
+                        type="file" 
+                        id="batchFileInput"
+                        accept=".txt,.csv,.jsonl"
+                        @change="handleFileSelect($event)"
+                        class="hidden">
+
+                    <div class="w-12 h-12 mx-auto rounded-full bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mb-3 shadow-sm">
+                        <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                    </div>
+
+                    <p class="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+                        Drag and drop your file here, or 
+                        <label for="batchFileInput" class="text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer font-semibold">browse</label>
+                    </p>
+                    <p class="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Supports UTF-8 .txt (one line per row), .csv (with BOM detection), and .jsonl</p>
+
+                    <!-- File selected tag -->
+                    <template x-if="selectedFile">
+                        <div class="mt-4 inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-medium bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 shadow-sm">
+                            <svg class="w-4 h-4 text-indigo-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            <span class="font-bold mr-1" x-text="fileName"></span>
+                            <span class="text-zinc-400" x-text="'(' + fileSizeFormatted + ')'"></span>
+                            <button @click.stop="selectedFile = null; fileName = ''" class="ml-2 text-zinc-400 hover:text-rose-500">
+                                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- Column / Field Selection (Appears for multi-column CSV or JSONL) -->
+                <template x-if="jobStatus === 'needs_column'">
+                    <div class="mt-4 p-4 rounded-xl border border-indigo-200 dark:border-indigo-900 bg-indigo-50/50 dark:bg-indigo-950/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                            <span class="text-sm font-semibold text-indigo-950 dark:text-indigo-200">Select Text Column</span>
+                            <p class="text-xs text-indigo-700 dark:text-indigo-400">Multiple columns detected. Choose which column contains the corrupted OCR text:</p>
+                        </div>
+
+                        <div class="flex items-center space-x-2">
+                            <select 
+                                x-model="selectedColumn"
+                                class="text-xs rounded-lg border border-indigo-300 dark:border-indigo-700 bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 py-1.5 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono">
+                                <template x-for="col in detectedColumns" :key="col">
+                                    <option :value="col" x-text="col"></option>
+                                </template>
+                            </select>
+
+                            <button 
+                                type="button"
+                                @click="submitColumnChoice()"
+                                :disabled="isConfiguringColumn"
+                                class="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 shadow-sm transition-all">
+                                <span x-text="isConfiguringColumn ? 'Starting...' : 'Start Job'"></span>
+                            </button>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- Upload Error Notice -->
+                <template x-if="uploadError">
+                    <div class="mt-4 p-3 rounded-xl border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/40 text-rose-900 dark:text-rose-200 text-xs flex items-center justify-between">
+                        <span x-text="uploadError"></span>
+                        <button @click="uploadError = null" class="text-rose-400 hover:text-rose-600">✕</button>
+                    </div>
+                </template>
+
+                <!-- Action Button -->
+                <template x-if="jobStatus !== 'needs_column'">
+                    <div class="mt-4 flex justify-end">
+                        <button 
+                            type="button"
+                            @click="startBatchUpload()"
+                            :disabled="!selectedFile || isUploading || jobStatus === 'running'"
+                            class="px-5 py-2 rounded-lg text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all flex items-center space-x-2">
+                            <template x-if="isUploading">
+                                <svg class="animate-spin -ml-0.5 mr-1 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                                </svg>
+                            </template>
+                            <span x-text="isUploading ? 'Uploading...' : 'Upload & Start Processing'"></span>
+                        </button>
+                    </div>
+                </template>
             </div>
-            <h2 class="text-lg font-bold text-zinc-900 dark:text-zinc-100">Batch Processing</h2>
-            <p class="text-sm text-zinc-500 dark:text-zinc-400 mt-1 max-w-md mx-auto">
-                CSV and JSONL batch file correction with real-time SSE progress streaming and background worker queue.
-            </p>
-            <span class="inline-block mt-4 px-3 py-1 rounded-full text-xs font-semibold bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
-                Coming in Phase 3
-            </span>
+
+            <!-- Active Job Progress & Streaming Card -->
+            <template x-if="currentJobId && jobStatus !== 'needs_column'">
+                <div class="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm p-6 space-y-4">
+                    
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-sm font-bold text-zinc-900 dark:text-zinc-100" x-text="fileName"></span>
+                            <span 
+                                :class="{
+                                    'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300': jobStatus === 'running',
+                                    'bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300': jobStatus === 'queued',
+                                    'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300': jobStatus === 'completed',
+                                    'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400': jobStatus === 'cancelled',
+                                    'bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300': jobStatus === 'error'
+                                }"
+                                class="px-2.5 py-0.5 rounded-full text-xs font-semibold capitalize"
+                                x-text="jobStatus">
+                            </span>
+                        </div>
+
+                        <!-- Live Metrics -->
+                        <div class="flex items-center space-x-3 text-xs text-zinc-500 dark:text-zinc-400">
+                            <span x-text="progress.done_rows.toLocaleString() + ' / ' + progress.total_rows.toLocaleString() + ' rows'"></span>
+                            <template x-if="progress.rows_per_sec > 0">
+                                <span class="text-indigo-600 dark:text-indigo-400 font-medium" x-text="progress.rows_per_sec + ' rows/s'"></span>
+                            </template>
+                            <template x-if="progress.eta_seconds > 0">
+                                <span x-text="'ETA: ' + progress.eta_seconds + 's'"></span>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- Progress Bar -->
+                    <div class="w-full bg-zinc-100 dark:bg-zinc-800 rounded-full h-3 overflow-hidden shadow-inner">
+                        <div 
+                            class="bg-indigo-600 h-3 rounded-full transition-all duration-300 ease-out"
+                            :style="'width: ' + progress.percent + '%'">
+                        </div>
+                    </div>
+
+                    <!-- Job Actions Bar (Cancel & Downloads) -->
+                    <div class="flex items-center justify-between pt-2">
+                        <span class="text-xs text-zinc-400 font-mono" x-text="'Job: ' + currentJobId"></span>
+
+                        <div class="flex items-center space-x-2">
+                            <!-- Cancel Button -->
+                            <template x-if="jobStatus === 'running' || jobStatus === 'queued'">
+                                <button 
+                                    type="button"
+                                    @click="cancelActiveJob()"
+                                    class="px-3 py-1.5 rounded-lg text-xs font-medium text-rose-600 hover:text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-900/60 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors">
+                                    Cancel Job
+                                </button>
+                            </template>
+
+                            <!-- Download Buttons -->
+                            <template x-if="jobStatus === 'completed'">
+                                <div class="flex items-center space-x-2">
+                                    <button 
+                                        type="button"
+                                        @click="download('csv')"
+                                        class="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm transition-all flex items-center space-x-1">
+                                        <svg class="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                        </svg>
+                                        <span>Download CSV (Excel UTF-8 BOM)</span>
+                                    </button>
+
+                                    <button 
+                                        type="button"
+                                        @click="download('jsonl')"
+                                        class="px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
+                                        Download JSONL
+                                    </button>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+            </template>
+
+            <!-- 10-Row Preview Table with Inline Diff -->
+            <template x-if="previewRows.length > 0">
+                <div class="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm overflow-hidden">
+                    <div class="px-4 py-3 bg-zinc-50 dark:bg-zinc-900/60 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+                        <span class="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                            Results Preview (First 10 Rows with Character Diffs)
+                        </span>
+                        <span class="text-xs text-zinc-400 font-mono" x-text="previewRows.length + ' rows loaded'"></span>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs font-mono divide-y divide-zinc-200 dark:divide-zinc-800">
+                            <thead class="bg-zinc-50 dark:bg-zinc-900/40 text-zinc-500">
+                                <tr>
+                                    <th class="py-2.5 px-3 w-16">#</th>
+                                    <th class="py-2.5 px-3 w-1/2">Original Text</th>
+                                    <th class="py-2.5 px-3 w-1/2">Corrected Output</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-zinc-200 dark:divide-zinc-800 bg-white dark:bg-zinc-900">
+                                <template x-for="row in previewRows" :key="'preview-' + row.index">
+                                    <tr class="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors">
+                                        <td class="py-2 px-3 text-zinc-400 font-semibold" x-text="row.index"></td>
+                                        
+                                        <!-- Original with Red highlights for removed characters -->
+                                        <td class="py-2 px-3 whitespace-pre-wrap break-words leading-relaxed">
+                                            <template x-for="(op, opIdx) in row.diff" :key="'p-orig-' + row.index + '-' + opIdx">
+                                                <span 
+                                                    x-show="op.tag === 'equal' || op.tag === 'replace' || op.tag === 'delete'"
+                                                    :class="{
+                                                        'bg-rose-200 dark:bg-rose-950/80 text-rose-900 dark:text-rose-200 font-semibold rounded-sm px-0.5 border-b-2 border-rose-400': op.tag === 'replace' || op.tag === 'delete'
+                                                    }"
+                                                    x-text="op.a_text">
+                                                </span>
+                                            </template>
+                                        </td>
+
+                                        <!-- Corrected with Green highlights for added characters -->
+                                        <td class="py-2 px-3 whitespace-pre-wrap break-words leading-relaxed">
+                                            <template x-for="(op, opIdx) in row.diff" :key="'p-corr-' + row.index + '-' + opIdx">
+                                                <span 
+                                                    x-show="op.tag === 'equal' || op.tag === 'replace' || op.tag === 'insert'"
+                                                    :class="{
+                                                        'bg-emerald-200 dark:bg-emerald-950/80 text-emerald-900 dark:text-emerald-200 font-semibold rounded-sm px-0.5 border-b-2 border-emerald-400': op.tag === 'replace' || op.tag === 'insert'
+                                                    }"
+                                                    x-text="op.b_text">
+                                                </span>
+                                            </template>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </template>
+
+            <!-- Recent Jobs History Table -->
+            <div class="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm overflow-hidden">
+                <div class="px-4 py-3 bg-zinc-50 dark:bg-zinc-900/60 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+                    <span class="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                        Recent Batch Jobs
+                    </span>
+                    <button 
+                        @click="loadRecentJobs()" 
+                        class="text-xs text-indigo-600 dark:text-indigo-400 hover:underline">
+                        Refresh
+                    </button>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs divide-y divide-zinc-200 dark:divide-zinc-800">
+                        <thead class="bg-zinc-50 dark:bg-zinc-900/40 text-zinc-500 font-medium">
+                            <tr>
+                                <th class="py-2.5 px-4">Filename</th>
+                                <th class="py-2.5 px-4">Rows</th>
+                                <th class="py-2.5 px-4">Adapter</th>
+                                <th class="py-2.5 px-4">Status</th>
+                                <th class="py-2.5 px-4 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-zinc-200 dark:divide-zinc-800">
+                            <template x-if="recentJobs.length === 0">
+                                <tr>
+                                    <td colspan="5" class="py-6 text-center text-zinc-400">No batch jobs yet.</td>
+                                </tr>
+                            </template>
+
+                            <template x-for="job in recentJobs" :key="job.job_id">
+                                <tr class="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors">
+                                    <td class="py-2.5 px-4 font-medium text-zinc-800 dark:text-zinc-200" x-text="job.filename"></td>
+                                    <td class="py-2.5 px-4 text-zinc-500" x-text="job.done_rows + ' / ' + job.total_rows"></td>
+                                    <td class="py-2.5 px-4 text-zinc-400 font-mono text-[11px]" x-text="job.adapter.split('/').pop()"></td>
+                                    <td class="py-2.5 px-4">
+                                        <span 
+                                            :class="{
+                                                'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300': job.status === 'running',
+                                                'bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300': job.status === 'queued' || job.status === 'needs_column',
+                                                'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300': job.status === 'completed',
+                                                'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400': job.status === 'cancelled',
+                                                'bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300': job.status === 'error'
+                                            }"
+                                            class="px-2 py-0.5 rounded-full text-[11px] font-semibold capitalize"
+                                            x-text="job.status">
+                                        </span>
+                                    </td>
+                                    <td class="py-2.5 px-4 text-right space-x-2">
+                                        <button 
+                                            @click="viewJob(job)" 
+                                            class="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-medium">
+                                            View
+                                        </button>
+                                        <template x-if="job.status === 'completed'">
+                                            <a 
+                                                :href="'/api/batch/' + job.job_id + '/download?format=csv'" 
+                                                class="text-xs text-emerald-600 dark:text-emerald-400 hover:underline font-medium">
+                                                CSV
+                                            </a>
+                                        </template>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
         </div>
 
+
         <!-- =================================================================== -->
-        <!-- TAB 3: ANALYTICS (Placeholder)                                       -->
+        <!-- TAB 3: ANALYTICS DASHBOARD (Phase 4a)                               -->
         <!-- =================================================================== -->
-        <div x-show="activeTab === 'analytics'" class="p-8 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm text-center">
-            <div class="w-12 h-12 mx-auto rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-500 mb-3">
-                <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
+        <div x-show="activeTab === 'analytics'" x-data="analyticsTab" class="space-y-8">
+            
+            <!-- Section Header -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-zinc-200 dark:border-zinc-800">
+                <div>
+                    <h2 class="text-xl font-bold text-zinc-900 dark:text-zinc-100 flex items-center space-x-2">
+                        <span>Evaluation Analytics</span>
+                        <span class="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                            Checkpoint v1.0
+                        </span>
+                    </h2>
+                    <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                        Read-only inspection of frozen evaluation benchmark (<span class="font-mono" x-text="summary.checkpoint_file || 'data/ocr_eval_checkpoint.jsonl'"></span>).
+                    </p>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <button 
+                        @click="loadSummary(); loadConfusion(); loadFailures();" 
+                        class="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 shadow-sm transition-colors">
+                        <svg class="w-3.5 h-3.5 text-zinc-400" :class="{ 'animate-spin': isLoadingSummary || isLoadingConfusion || isLoadingFailures }" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        <span>Refresh Metrics</span>
+                    </button>
+                </div>
             </div>
-            <h2 class="text-lg font-bold text-zinc-900 dark:text-zinc-100">Evaluation Analytics</h2>
-            <p class="text-sm text-zinc-500 dark:text-zinc-400 mt-1 max-w-md mx-auto">
-                Interactive domain accuracy breakdowns, confusion matrices, and error categorization graphs.
-            </p>
-            <span class="inline-block mt-4 px-3 py-1 rounded-full text-xs font-semibold bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
-                Coming in Phase 4
-            </span>
+
+            <!-- 1. Executive Summary Metric Cards -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                
+                <!-- Card 1: Total Rows -->
+                <div class="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-5 shadow-sm flex flex-col justify-between">
+                    <div class="flex items-center justify-between text-zinc-500 dark:text-zinc-400 mb-2">
+                        <span class="text-xs font-semibold uppercase tracking-wider">Total Rows Evaluated</span>
+                        <div class="w-8 h-8 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-600 dark:text-zinc-300">
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7c0-2-1-3-3-3H7C5 4 4 5 4 7z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6-3h6m-6 6h4" />
+                            </svg>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-2xl font-extrabold text-zinc-900 dark:text-zinc-100 font-mono" x-text="summary.total_rows ? summary.total_rows.toLocaleString() : '—'"></div>
+                        <div class="text-xs text-zinc-400 dark:text-zinc-500 mt-1 flex items-center space-x-1">
+                            <span>Exact matches:</span>
+                            <span class="font-semibold text-zinc-700 dark:text-zinc-300 font-mono" x-text="summary.exact_matches ? summary.exact_matches.toLocaleString() : '—'"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card 2: Overall Exact Match Accuracy -->
+                <div class="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-5 shadow-sm flex flex-col justify-between">
+                    <div class="flex items-center justify-between text-zinc-500 dark:text-zinc-400 mb-2">
+                        <span class="text-xs font-semibold uppercase tracking-wider">Overall Exact Accuracy</span>
+                        <div class="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-2xl font-extrabold text-indigo-600 dark:text-indigo-400 font-mono" x-text="summary.exact_match_acc !== undefined ? summary.exact_match_acc.toFixed(2) + '%' : '—'"></div>
+                        <!-- Progress bar -->
+                        <div class="w-full bg-zinc-100 dark:bg-zinc-800 h-1.5 rounded-full mt-2 overflow-hidden">
+                            <div class="bg-indigo-600 dark:bg-indigo-500 h-1.5 rounded-full transition-all duration-500" :style="'width: ' + (summary.exact_match_acc || 0) + '%'"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card 3: Math Accuracy -->
+                <div class="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-5 shadow-sm flex flex-col justify-between">
+                    <div class="flex items-center justify-between text-zinc-500 dark:text-zinc-400 mb-2">
+                        <span class="text-xs font-semibold uppercase tracking-wider">Math Domain Accuracy</span>
+                        <div class="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                            </svg>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 font-mono" x-text="summary.math_acc !== undefined ? summary.math_acc.toFixed(2) + '%' : '—'"></div>
+                        <div class="text-xs text-zinc-400 dark:text-zinc-500 mt-1 flex items-center space-x-1">
+                            <span class="font-mono" x-text="(summary.math_correct || 0).toLocaleString() + ' / ' + (summary.math_total || 0).toLocaleString()"></span>
+                            <span>correct</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card 4: Text Accuracy -->
+                <div class="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-5 shadow-sm flex flex-col justify-between">
+                    <div class="flex items-center justify-between text-zinc-500 dark:text-zinc-400 mb-2">
+                        <span class="text-xs font-semibold uppercase tracking-wider">Text (WikiText-2) Accuracy</span>
+                        <div class="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/60 flex items-center justify-center text-amber-600 dark:text-amber-400">
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                            </svg>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-2xl font-extrabold text-amber-600 dark:text-amber-400 font-mono" x-text="summary.text_acc !== undefined ? summary.text_acc.toFixed(2) + '%' : '—'"></div>
+                        <div class="text-xs text-zinc-400 dark:text-zinc-500 mt-1 flex items-center space-x-1">
+                            <span class="font-mono" x-text="(summary.text_correct || 0).toLocaleString() + ' / ' + (summary.text_total || 0).toLocaleString()"></span>
+                            <span>correct</span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- 2. Confusion Analysis: Heatmap & Sortable Top-Pairs Table -->
+            <div class="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm overflow-hidden">
+                
+                <!-- Card Header with Domain Filters -->
+                <div class="px-5 py-4 border-b border-zinc-200 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-zinc-50/70 dark:bg-zinc-900/60">
+                    <div>
+                        <h3 class="text-sm font-bold text-zinc-900 dark:text-zinc-100">Character & Symbol Confusion Analysis</h3>
+                        <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                            Character-level confusion matrix from difflib opcodes & target swap pairs. Click any cell to view failures.
+                        </p>
+                    </div>
+
+                    <!-- Domain Filter Toggle -->
+                    <div class="inline-flex rounded-lg border border-zinc-200 dark:border-zinc-700 p-0.5 bg-zinc-100 dark:bg-zinc-800 text-xs font-medium self-start sm:self-auto">
+                        <button 
+                            @click="setConfusionDomain('all')" 
+                            :class="confusionDomain === 'all' ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-xs' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200'"
+                            class="px-3 py-1 rounded-md transition-colors">
+                            All Domains
+                        </button>
+                        <button 
+                            @click="setConfusionDomain('math')" 
+                            :class="confusionDomain === 'math' ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-xs' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200'"
+                            class="px-3 py-1 rounded-md transition-colors">
+                            Math
+                        </button>
+                        <button 
+                            @click="setConfusionDomain('text')" 
+                            :class="confusionDomain === 'text' ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-xs' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200'"
+                            class="px-3 py-1 rounded-md transition-colors">
+                            Text
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 2-Column Layout: Heatmap (Left) + Top Pairs Table (Right) -->
+                <div class="p-5 grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    
+                    <!-- Left: Heatmap Grid (lg:col-span-7) -->
+                    <div class="lg:col-span-7 space-y-3">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                                Confusion Matrix Heatmap (Intensity by Frequency)
+                            </span>
+                            <span class="text-[11px] text-zinc-400 dark:text-zinc-500">
+                                Row: Expected · Col: Model Predicted
+                            </span>
+                        </div>
+
+                        <!-- Heatmap Container -->
+                        <div class="overflow-x-auto border border-zinc-200 dark:border-zinc-800 rounded-lg p-2 bg-zinc-50/50 dark:bg-zinc-950/40">
+                            
+                            <!-- Matrix Table -->
+                            <table class="w-full text-center border-collapse text-xs select-none">
+                                <thead>
+                                    <tr>
+                                        <!-- Corner label -->
+                                        <th class="p-1 text-[10px] text-zinc-400 font-mono text-left w-8">Exp\Pred</th>
+                                        <!-- Column Headers: Predicted Characters -->
+                                        <template x-for="ch in confusion.characters" :key="'col-' + ch">
+                                            <th class="p-1 font-mono text-xs font-bold text-zinc-700 dark:text-zinc-300 min-w-[28px]" x-text="ch"></th>
+                                        </template>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <template x-for="(rChar, rIdx) in confusion.characters" :key="'row-' + rChar">
+                                        <tr>
+                                            <!-- Row Header: Expected Character -->
+                                            <td class="p-1 font-mono text-xs font-bold text-zinc-700 dark:text-zinc-300 text-left" x-text="rChar"></td>
+                                            
+                                            <!-- Cells for predicted characters -->
+                                            <template x-for="(cChar, cIdx) in confusion.characters" :key="'cell-' + rChar + '-' + cChar">
+                                                <td class="p-0.5">
+                                                    <div 
+                                                        @mouseenter="hoverCell = { expected: rChar, predicted: cChar, count: confusion.grid[rIdx][cIdx] }"
+                                                        @mouseleave="hoverCell = null"
+                                                        @click="confusion.grid[rIdx][cIdx] > 0 && filterByPair(rChar, cChar)"
+                                                        :style="getCellStyle(confusion.grid[rIdx][cIdx])"
+                                                        :class="[
+                                                            getCellTextColor(confusion.grid[rIdx][cIdx]),
+                                                            confusion.grid[rIdx][cIdx] > 0 ? 'cursor-pointer hover:ring-2 hover:ring-indigo-500 hover:scale-105' : 'opacity-40'
+                                                        ]"
+                                                        class="h-7 min-w-[28px] rounded flex items-center justify-center font-mono text-[11px] transition-all"
+                                                        :title="'Expected: \'' + rChar + '\' → Predicted: \'' + cChar + '\': ' + (confusion.grid[rIdx][cIdx] || 0) + ' occurrences'">
+                                                        <span x-text="confusion.grid[rIdx][cIdx] > 0 ? (confusion.grid[rIdx][cIdx] > 999 ? (confusion.grid[rIdx][cIdx]/1000).toFixed(1) + 'k' : confusion.grid[rIdx][cIdx]) : '·'"></span>
+                                                    </div>
+                                                </td>
+                                            </template>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+
+                        </div>
+
+                        <!-- Interactive Tooltip Banner -->
+                        <div class="h-8 flex items-center px-3 rounded-md text-xs bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300">
+                            <template x-if="hoverCell && hoverCell.count > 0">
+                                <div class="flex items-center space-x-2 w-full justify-between">
+                                    <span class="font-mono">
+                                        Expected <span class="font-bold text-indigo-600 dark:text-indigo-400" x-text="'\'' + hoverCell.expected + '\''"></span> 
+                                        → Predicted <span class="font-bold text-indigo-600 dark:text-indigo-400" x-text="'\'' + hoverCell.predicted + '\''"></span>:
+                                        <strong class="ml-1" x-text="hoverCell.count.toLocaleString()"></strong> occurrences
+                                    </span>
+                                    <span class="text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold underline cursor-pointer">
+                                        Click to filter failures ↓
+                                    </span>
+                                </div>
+                            </template>
+                            <template x-if="!hoverCell || hoverCell.count === 0">
+                                <span class="text-zinc-400 dark:text-zinc-500 text-[11px]">
+                                    Hover over cells to see occurrence counts; click any highlighted cell to filter failures below.
+                                </span>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- Right: Sortable Top-Pairs Table (lg:col-span-5) -->
+                    <div class="lg:col-span-5 space-y-3">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                                Top Confusion Pairs
+                            </span>
+                            <span class="text-[11px] text-zinc-400 dark:text-zinc-500">
+                                Click header to sort
+                            </span>
+                        </div>
+
+                        <!-- Table -->
+                        <div class="overflow-x-auto border border-zinc-200 dark:border-zinc-800 rounded-lg max-h-[380px] overflow-y-auto">
+                            <table class="w-full text-left text-xs divide-y divide-zinc-200 dark:divide-zinc-800">
+                                <thead class="bg-zinc-50 dark:bg-zinc-800/60 sticky top-0 text-zinc-500 font-medium">
+                                    <tr>
+                                        <th @click="setSort('expected')" class="py-2 px-3 cursor-pointer hover:text-zinc-900 dark:hover:text-zinc-100">
+                                            Expected <span x-show="sortField === 'expected'" x-text="sortAsc ? '↑' : '↓'"></span>
+                                        </th>
+                                        <th @click="setSort('predicted')" class="py-2 px-3 cursor-pointer hover:text-zinc-900 dark:hover:text-zinc-100">
+                                            Predicted <span x-show="sortField === 'predicted'" x-text="sortAsc ? '↑' : '↓'"></span>
+                                        </th>
+                                        <th @click="setSort('count')" class="py-2 px-3 text-right cursor-pointer hover:text-zinc-900 dark:hover:text-zinc-100">
+                                            Occurrences <span x-show="sortField === 'count'" x-text="sortAsc ? '↑' : '↓'"></span>
+                                        </th>
+                                        <th class="py-2 px-3 text-right">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-zinc-200 dark:divide-zinc-800 bg-white dark:bg-zinc-900 font-mono">
+                                    <template x-for="pair in sortedTopPairs.slice(0, 15)" :key="'pair-' + pair.expected + '-' + pair.predicted">
+                                        <tr class="hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition-colors">
+                                            <td class="py-2 px-3 font-bold text-zinc-800 dark:text-zinc-200" x-text="'`' + pair.expected + '`'"></td>
+                                            <td class="py-2 px-3 font-bold text-rose-600 dark:text-rose-400" x-text="'`' + pair.predicted + '`'"></td>
+                                            <td class="py-2 px-3 text-right font-medium text-zinc-700 dark:text-zinc-300" x-text="pair.count.toLocaleString()"></td>
+                                            <td class="py-2 px-3 text-right font-sans">
+                                                <button 
+                                                    @click="filterByPair(pair.expected, pair.predicted)" 
+                                                    class="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline font-medium">
+                                                    Filter
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+
+            <!-- 3. Failures Explorer with Search, Filter & Side-by-Side Diff -->
+            <div id="failures-explorer" class="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm overflow-hidden">
+                
+                <!-- Header & Controls -->
+                <div class="px-5 py-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/60 space-y-3">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div>
+                            <h3 class="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center space-x-2">
+                                <span>Failures Explorer</span>
+                                <span class="text-xs px-2 py-0.5 rounded-full font-semibold bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800" x-text="failuresTotal.toLocaleString() + ' cases'"></span>
+                            </h3>
+                            <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                                Keyword search across input, expected target, and model output with side-by-side character diffs.
+                            </p>
+                        </div>
+
+                        <!-- Active Filter Badge -->
+                        <template x-if="activePairFilter || searchQuery || selectedDomain">
+                            <div class="flex items-center space-x-2 self-start sm:self-auto">
+                                <span class="text-xs px-2.5 py-1 rounded-md bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 flex items-center space-x-1">
+                                    <span x-show="activePairFilter" x-text="'Pair: `' + (activePairFilter ? activePairFilter.expected : '') + '` → `' + (activePairFilter ? activePairFilter.predicted : '') + '`'"></span>
+                                    <span x-show="!activePairFilter && searchQuery" x-text="'Query: \"' + searchQuery + '\"'"></span>
+                                    <span x-show="selectedDomain" x-text="'· ' + selectedDomain"></span>
+                                    <button @click="clearFilter()" class="ml-1.5 hover:text-rose-600 font-bold" title="Clear filter">×</button>
+                                </span>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Search & Filter Controls Bar -->
+                    <div class="flex flex-col sm:flex-row items-center gap-3">
+                        
+                        <!-- Search Box -->
+                        <div class="relative flex-1 w-full">
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-zinc-400">
+                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg>
+                            </div>
+                            <input 
+                                type="text"
+                                x-model="searchQuery"
+                                @input="onSearchInput()"
+                                placeholder="Search failures by word, character, or phrase..."
+                                class="w-full pl-9 pr-8 py-2 rounded-lg text-xs border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                            <button 
+                                x-show="searchQuery" 
+                                @click="searchQuery = ''; onSearchInput()" 
+                                class="absolute inset-y-0 right-0 pr-3 flex items-center text-zinc-400 hover:text-zinc-600">
+                                ×
+                            </button>
+                        </div>
+
+                        <!-- Domain Selector -->
+                        <div class="w-full sm:w-auto flex items-center space-x-2">
+                            <label for="failDomainSelect" class="text-xs text-zinc-500 dark:text-zinc-400 whitespace-nowrap">Domain:</label>
+                            <select 
+                                id="failDomainSelect"
+                                x-model="selectedDomain"
+                                @change="onDomainChange()"
+                                class="w-full sm:w-auto text-xs rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 py-2 pl-3 pr-8 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                <option value="">All Domains</option>
+                                <option value="math">Math</option>
+                                <option value="text">Text (WikiText-2)</option>
+                            </select>
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- Failures List / Rows -->
+                <div class="divide-y divide-zinc-200 dark:divide-zinc-800">
+                    
+                    <!-- Loading Skeleton -->
+                    <template x-if="isLoadingFailures">
+                        <div class="p-8 text-center text-zinc-400 space-y-3">
+                            <div class="animate-spin inline-block w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
+                            <p class="text-xs">Loading failure cases...</p>
+                        </div>
+                    </template>
+
+                    <!-- Empty State -->
+                    <template x-if="!isLoadingFailures && failures.length === 0">
+                        <div class="p-10 text-center text-zinc-400 space-y-2">
+                            <svg class="w-8 h-8 mx-auto text-zinc-300 dark:text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            <p class="text-sm font-medium text-zinc-600 dark:text-zinc-300">No failures found</p>
+                            <p class="text-xs text-zinc-400">No evaluation cases match your search query or domain filters.</p>
+                            <button @click="clearFilter()" class="mt-2 text-xs text-indigo-600 dark:text-indigo-400 hover:underline">Clear all filters</button>
+                        </div>
+                    </template>
+
+                    <!-- Failure Item Cards -->
+                    <template x-for="item in failures" :key="'fail-' + item.index">
+                        <div class="p-4 sm:p-5 hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors space-y-3">
+                            
+                            <!-- Row Header: Index & Domain -->
+                            <div class="flex items-center justify-between text-xs">
+                                <div class="flex items-center space-x-2">
+                                    <span class="font-mono font-bold text-zinc-800 dark:text-zinc-200" x-text="'Case #' + item.index"></span>
+                                    <span 
+                                        :class="item.domain === 'math' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800' : 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border-amber-200 dark:border-amber-800'"
+                                        class="px-2 py-0.5 rounded-full font-semibold uppercase text-[10px] border"
+                                        x-text="item.domain">
+                                    </span>
+                                </div>
+                                <span class="text-[11px] text-zinc-400 font-mono" x-text="'Index ' + item.index"></span>
+                            </div>
+
+                            <!-- Corrupted Input -->
+                            <div>
+                                <span class="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider block mb-1">Input (Corrupted):</span>
+                                <div class="p-2.5 rounded-lg bg-zinc-50 dark:bg-zinc-950/60 border border-zinc-200/80 dark:border-zinc-800 font-mono text-xs text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap break-words" x-text="item.input"></div>
+                            </div>
+
+                            <!-- Side-by-Side: Target Expected vs Model Prediction with Diff -->
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                                
+                                <!-- Left: Target Expected (with deletions/replacements highlighted in red) -->
+                                <div class="space-y-1">
+                                    <span class="text-[11px] font-semibold text-rose-600 dark:text-rose-400 uppercase tracking-wider flex items-center space-x-1">
+                                        <span>Target (Ground Truth Expected)</span>
+                                    </span>
+                                    <div class="p-2.5 rounded-lg bg-zinc-50 dark:bg-zinc-950/60 border border-zinc-200/80 dark:border-zinc-800 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words min-h-[50px]">
+                                        <template x-for="(op, opIdx) in item.diff" :key="'f-exp-' + item.index + '-' + opIdx">
+                                            <span 
+                                                x-show="op.tag === 'equal' || op.tag === 'replace' || op.tag === 'delete'"
+                                                :class="{
+                                                    'bg-rose-200 dark:bg-rose-950/80 text-rose-900 dark:text-rose-200 font-semibold rounded-xs px-0.5 border-b-2 border-rose-400': op.tag === 'replace' || op.tag === 'delete'
+                                                }"
+                                                x-text="op.a_text">
+                                            </span>
+                                        </template>
+                                    </div>
+                                </div>
+
+                                <!-- Right: Model Prediction (with insertions/replacements highlighted in green) -->
+                                <div class="space-y-1">
+                                    <span class="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider flex items-center space-x-1">
+                                        <span>Model Prediction</span>
+                                    </span>
+                                    <div class="p-2.5 rounded-lg bg-zinc-50 dark:bg-zinc-950/60 border border-zinc-200/80 dark:border-zinc-800 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words min-h-[50px]">
+                                        <template x-for="(op, opIdx) in item.diff" :key="'f-pred-' + item.index + '-' + opIdx">
+                                            <span 
+                                                x-show="op.tag === 'equal' || op.tag === 'replace' || op.tag === 'insert'"
+                                                :class="{
+                                                    'bg-emerald-200 dark:bg-emerald-950/80 text-emerald-900 dark:text-emerald-200 font-semibold rounded-xs px-0.5 border-b-2 border-emerald-400': op.tag === 'replace' || op.tag === 'insert'
+                                                }"
+                                                x-text="op.b_text">
+                                            </span>
+                                        </template>
+                                    </div>
+                                </div>
+
+                            </div>
+
+                        </div>
+                    </template>
+
+                </div>
+
+                <!-- Pagination Footer -->
+                <div class="px-5 py-3 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                    <div class="text-zinc-500">
+                        Showing 
+                        <span class="font-semibold text-zinc-800 dark:text-zinc-200" x-text="failuresTotal > 0 ? ((failuresPage - 1) * failuresPageSize + 1).toLocaleString() : 0"></span>
+                        to 
+                        <span class="font-semibold text-zinc-800 dark:text-zinc-200" x-text="Math.min(failuresPage * failuresPageSize, failuresTotal).toLocaleString()"></span>
+                        of 
+                        <span class="font-semibold text-zinc-800 dark:text-zinc-200" x-text="failuresTotal.toLocaleString()"></span>
+                        failure cases
+                    </div>
+
+                    <div class="flex items-center space-x-2">
+                        <button 
+                            @click="prevPage()"
+                            :disabled="failuresPage <= 1"
+                            class="px-2.5 py-1 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 disabled:opacity-40 hover:bg-zinc-50 dark:hover:bg-zinc-700">
+                            Previous
+                        </button>
+                        <span class="text-zinc-500 font-mono" x-text="failuresPage + ' / ' + failuresTotalPages"></span>
+                        <button 
+                            @click="nextPage()"
+                            :disabled="failuresPage >= failuresTotalPages"
+                            class="px-2.5 py-1 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 disabled:opacity-40 hover:bg-zinc-50 dark:hover:bg-zinc-700">
+                            Next
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+
         </div>
 
         <!-- =================================================================== -->

@@ -20,6 +20,15 @@ class WebSettings(BaseSettings):
     MAX_NEW_TOKENS: int = 100
     DEFAULT_BATCH_SIZE: int = 8
 
+    # Batch file limits and job storage
+    MAX_UPLOAD_MB: int = 50
+    MAX_BATCH_ROWS: int = 50000
+    JOBS_DIR: Path = Path("outputs/web/jobs")
+
+    # Evaluation checkpoint path for analytics
+    CHECKPOINT_PATH: Path = Path("data/ocr_eval_checkpoint.jsonl")
+
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
