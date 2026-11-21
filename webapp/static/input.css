@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  /* Visible diff whitespace indicator */
+  .diff-char-space::before {
+    content: "·";
+    opacity: 0.5;
+  }
+  .diff-char-newline::before {
+    content: "↵\A";
+    opacity: 0.6;
+    white-space: pre;
+  }
+}
+
+/* Ensure smooth transitions for dark/light toggle */
+html {
+  scroll-behavior: smooth;
+}
+
+pre, code {
+  font-variant-ligatures: none;
+}

@@ -134,3 +134,35 @@ Before sharing this repository:
 1. Ensure `.env` is absent (`.gitignore` protects it).
 2. Check that no model checkpoints or downloaded weights from `models/` or raw benchmark datasets in `data/` or `outputs/` are included.
 3. Keep code completely decoupled from hardcoded credentials.
+
+---
+
+## 8. Web Application (UI & API)
+
+A local web application providing an interactive character-diff correction UI and REST API.
+
+### Running the Web Server
+Launch the server via the batch script:
+```cmd
+run_web.bat
+```
+Or with Uvicorn:
+```powershell
+.\venv\Scripts\python -m uvicorn webapp.main:app --host 127.0.0.1 --port 8000
+```
+- Web UI: http://127.0.0.1:8000
+- Interactive Swagger API docs: http://127.0.0.1:8000/docs
+- Health API: http://127.0.0.1:8000/api/health
+
+### Rebuilding Tailwind CSS (Optional)
+The pre-compiled CSS bundle is already committed at `webapp/static/css/tailwind.css`. No Node.js or npm is required at runtime.
+
+If you modify `index.html` or `app.js` and wish to rebuild the stylesheet:
+1. Download the standalone Tailwind CLI for Windows (`tailwindcss-windows-x64.exe`) from GitHub:
+   https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-windows-x64.exe
+2. Place the executable as `tailwindcss.exe` in the repository root.
+3. Run the build script:
+   ```cmd
+   webapp\static\build_css.bat
+   ```
+
