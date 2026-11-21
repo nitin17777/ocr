@@ -103,6 +103,8 @@ def train(
     token = get_hf_token()
     print(f"CUDA Device: {torch.cuda.get_device_name(0)}")
     print(f"Base model: {BASE_MODEL_ID}")
+    if output_dir.exists() and any(output_dir.iterdir()):
+        raise FileExistsError(f"Output directory '{output_dir}' already exists and is not empty. Refusing to overwrite.")
     print(f"Output adapter directory: {output_dir}")
 
     # Quantization config
@@ -210,11 +212,11 @@ def train(
 def main():
     parser = argparse.ArgumentParser(description="OCR LoRA Retraining Script")
     parser.add_argument("--data", type=str, default=str(CHECKPOINT_INPUT_PATH), help="Path to JSONL training data")
-    parser.add_argument("--output", type=str, default=str(MODELS_DIR / "ocr-lora-retrained"), help="Output adapter directory")
+    parser.add_argument("--output-dir", "--output", dest="output_dir", type=str, default=str(MODELS_DIR / "ocr-lora-retrained"), help="Output adapter directory")
     parser.add_argument("--epochs", type=int, default=TRAIN_EPOCHS, help="Number of epochs")
     parser.add_argument("--batch-size", type=int, default=TRAIN_BATCH_SIZE, help="Batch size")
     parser.add_argument("--grad-accum", type=int, default=TRAIN_GRAD_ACCUM, help="Gradient accumulation steps")
-    parser.add_argument("--lr", type=float, default=TRAIN_LR, help="Learning rate")
+    parser.add_argument("--learning-rate", "--lr", dest="learning_rate", type=float, default=TRAIN_LR, help="Learning rate")
     parser.add_argument("--no-4bit", action="store_true", help="Disable 4-bit nf4 quantization (use FP16)")
     parser.add_argument("--push-to-hub", action="store_true", help="Push adapter to Hugging Face Hub (requires --repo-id)")
     parser.add_argument("--repo-id", type=str, default=None, help="Target Hugging Face repository ID")
@@ -222,11 +224,11 @@ def main():
 
     train(
         data_path=Path(args.data),
-        output_dir=Path(args.output),
+        output_dir=Path(args.output_dir),
         epochs=args.epochs,
         batch_size=args.batch_size,
         grad_accum=args.grad_accum,
-        lr=args.lr,
+        lr=args.learning_rate,
         use_4bit=not args.no_4bit,
         push_to_hub=args.push_to_hub,
         hub_repo_id=args.repo_id,

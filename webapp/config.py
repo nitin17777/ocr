@@ -28,6 +28,10 @@ class WebSettings(BaseSettings):
     # Evaluation checkpoint path for analytics
     CHECKPOINT_PATH: Path = Path("data/ocr_eval_checkpoint.jsonl")
 
+    # Training runs directory and minimum free VRAM requirement
+    RUNS_DIR: Path = Path("outputs/web/runs")
+    MIN_TRAIN_FREE_VRAM_MB: float = 2000.0
+
 
     model_config = SettingsConfigDict(
         env_file=".env",

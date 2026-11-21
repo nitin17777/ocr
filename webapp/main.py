@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
 
 from webapp.config import settings
-from webapp.routers import system, correct, batch, analytics
+from webapp.routers import system, correct, batch, analytics, training
 from webapp.services.model_manager import model_manager
 from webapp.services.batch_jobs import batch_manager
 
@@ -48,6 +48,7 @@ def create_app() -> FastAPI:
     app.include_router(correct.router)
     app.include_router(batch.router)
     app.include_router(analytics.router)
+    app.include_router(training.router)
 
 
     # Mount static assets

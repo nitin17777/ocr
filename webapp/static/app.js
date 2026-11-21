@@ -851,5 +851,269 @@ document.addEventListener('alpine:init', () => {
             }
         }
     }));
+
+    // Training Runner & Monitor Tab Component (Phase 4b)
+    Alpine.data('trainingTab', () => ({
+        // Form Configuration
+        config: {
+            output_name: 'ocr-lora-run-1',
+            epochs: 3,
+            batch_size: 4,
+            learning_rate: 0.0002,
+            grad_accum: 2,
+        },
+        validationErrors: {},
+        showConfirmModal: false,
+
+        // Active / Last Run State
+        runStatus: {
+            run_id: 'none',
+            output_name: '',
+            status: 'idle', // idle | running | completed | failed | cancelled
+            epochs: 3,
+            batch_size: 4,
+            learning_rate: 0.0002,
+            grad_accum: 2,
+            current_epoch: null,
+            current_step: null,
+            total_steps: null,
+            current_loss: null,
+            output_dir: '',
+            started_at: null,
+            completed_at: null,
+            log_lines: [],
+        },
+
+        pastRuns: [],
+        isLoadingRuns: false,
+        isStarting: false,
+        isCancelling: false,
+        autoScroll: true,
+        errorMessage: null,
+        refreshSuccessMessage: null,
+        eventSource: null,
+
+        async init() {
+            await this.loadStatus();
+            await this.loadPastRuns();
+            if (this.runStatus.status === 'running') {
+                this.connectSSE();
+            }
+        },
+
+        validateForm() {
+            this.validationErrors = {};
+            const namePattern = /^[A-Za-z0-9_-]{1,64}$/;
+            if (!this.config.output_name || !namePattern.test(this.config.output_name)) {
+                this.validationErrors.output_name = 'Must be 1-64 characters (letters, numbers, underscores, hyphens only).';
+            }
+            const epochs = Number(this.config.epochs);
+            if (isNaN(epochs) || epochs < 1 || epochs > 10) {
+                this.validationErrors.epochs = 'Epochs must be between 1 and 10.';
+            }
+            const batchSize = Number(this.config.batch_size);
+            if (isNaN(batchSize) || batchSize < 1 || batchSize > 4) {
+                this.validationErrors.batch_size = 'Batch size must be between 1 and 4 for 4GB VRAM.';
+            }
+            const lr = Number(this.config.learning_rate);
+            if (isNaN(lr) || lr < 1e-6 || lr > 1e-3) {
+                this.validationErrors.learning_rate = 'Learning rate must be between 1e-6 and 1e-3.';
+            }
+            return Object.keys(this.validationErrors).length === 0;
+        },
+
+        openConfirmModal() {
+            if (!this.validateForm()) return;
+            this.errorMessage = null;
+            this.showConfirmModal = true;
+        },
+
+        async startTraining() {
+            this.showConfirmModal = false;
+            this.isStarting = true;
+            this.errorMessage = null;
+            this.refreshSuccessMessage = null;
+
+            try {
+                const res = await fetch('/api/train', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        output_name: this.config.output_name.trim(),
+                        epochs: Number(this.config.epochs),
+                        batch_size: Number(this.config.batch_size),
+                        learning_rate: Number(this.config.learning_rate),
+                        grad_accum: Number(this.config.grad_accum),
+                    })
+                });
+
+                if (res.ok) {
+                    this.runStatus = await res.json();
+                    this.connectSSE();
+                    this.loadPastRuns();
+                } else {
+                    const errData = await res.json().catch(() => ({}));
+                    if (res.status === 503) {
+                        this.errorMessage = 'A training run is already in progress.';
+                    } else if (res.status === 409) {
+                        this.errorMessage = errData.detail || 'Target adapter directory already exists. Choose a different name.';
+                    } else if (res.status === 422) {
+                        this.errorMessage = 'Parameter validation failed. Please check form inputs.';
+                    } else {
+                        this.errorMessage = errData.detail || `Server error (${res.status}). Failed to launch training.`;
+                    }
+                }
+            } catch (err) {
+                this.errorMessage = `Network failure: ${err.message}`;
+            } finally {
+                this.isStarting = false;
+            }
+        },
+
+        connectSSE() {
+            if (this.eventSource) {
+                this.eventSource.close();
+            }
+
+            this.eventSource = new EventSource('/api/train/events');
+
+            this.eventSource.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'log') {
+                        if (data.line) {
+                            this.runStatus.log_lines.push(data.line);
+                            if (this.runStatus.log_lines.length > 1000) {
+                                this.runStatus.log_lines.shift();
+                            }
+                        }
+                        if (data.epoch !== undefined && data.epoch !== null) this.runStatus.current_epoch = data.epoch;
+                        if (data.step !== undefined && data.step !== null) this.runStatus.current_step = data.step;
+                        if (data.total_steps !== undefined && data.total_steps !== null) this.runStatus.total_steps = data.total_steps;
+                        if (data.loss !== undefined && data.loss !== null) this.runStatus.current_loss = data.loss;
+                        if (data.status) this.runStatus.status = data.status;
+
+                        if (this.autoScroll) {
+                            this.scrollToBottom();
+                        }
+                    } else if (data.type === 'status') {
+                        this.runStatus.status = data.status;
+                        if (data.status === 'completed' || data.status === 'failed' || data.status === 'cancelled') {
+                            this.eventSource.close();
+                            this.eventSource = null;
+                            this.loadPastRuns();
+                        }
+                    }
+                } catch (err) {
+                    console.error('Failed to parse SSE event data:', err);
+                }
+            };
+
+            this.eventSource.onerror = () => {
+                // Keep polling status in background if SSE disconnects
+                this.loadStatus();
+            };
+        },
+
+        scrollToBottom() {
+            this.$nextTick(() => {
+                const terminal = document.getElementById('training-terminal');
+                if (terminal) {
+                    terminal.scrollTop = terminal.scrollHeight;
+                }
+            });
+        },
+
+        async cancelTraining() {
+            if (!confirm('Are you sure you want to cancel the running training process? The process tree will be killed immediately.')) {
+                return;
+            }
+
+            this.isCancelling = true;
+            try {
+                const res = await fetch('/api/train/cancel', { method: 'POST' });
+                if (res.ok) {
+                    this.runStatus.status = 'cancelled';
+                    if (this.eventSource) {
+                        this.eventSource.close();
+                        this.eventSource = null;
+                    }
+                    this.loadPastRuns();
+                }
+            } catch (err) {
+                console.error('Failed to cancel training:', err);
+            } finally {
+                this.isCancelling = false;
+            }
+        },
+
+        async loadStatus() {
+            try {
+                const res = await fetch('/api/train/status');
+                if (res.ok) {
+                    this.runStatus = await res.json();
+                    if (this.autoScroll) {
+                        this.scrollToBottom();
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to load training status:', err);
+            }
+        },
+
+        async loadPastRuns() {
+            this.isLoadingRuns = true;
+            try {
+                const res = await fetch('/api/train/runs');
+                if (res.ok) {
+                    this.pastRuns = await res.json();
+                }
+            } catch (err) {
+                console.error('Failed to load past runs:', err);
+            } finally {
+                this.isLoadingRuns = false;
+            }
+        },
+
+        viewRunLogs(run) {
+            this.runStatus.run_id = run.run_id;
+            this.runStatus.output_name = run.output_name;
+            this.runStatus.status = run.status;
+            this.runStatus.epochs = run.epochs;
+            this.runStatus.batch_size = run.batch_size;
+            this.runStatus.learning_rate = run.learning_rate;
+            this.runStatus.grad_accum = run.grad_accum;
+            this.runStatus.current_epoch = run.current_epoch;
+            this.runStatus.current_step = run.current_step;
+            this.runStatus.total_steps = run.total_steps;
+            this.runStatus.current_loss = run.current_loss;
+            this.runStatus.output_dir = run.output_dir;
+            this.runStatus.started_at = run.started_at;
+            this.runStatus.completed_at = run.completed_at;
+            this.loadStatus();
+        },
+
+        async refreshAdaptersList() {
+            try {
+                const res = await fetch('/api/adapters');
+                if (res.ok) {
+                    this.refreshSuccessMessage = 'Adapter catalog successfully updated! Your new adapter is available on the Correct and Batch tabs.';
+                    setTimeout(() => { this.refreshSuccessMessage = null; }, 5000);
+                }
+            } catch (err) {
+                console.error('Failed to refresh adapters:', err);
+            }
+        },
+
+        get progressPercent() {
+            if (this.runStatus.total_steps && this.runStatus.current_step) {
+                return Math.min(100, Math.round((this.runStatus.current_step / this.runStatus.total_steps) * 100));
+            }
+            if (this.runStatus.epochs && this.runStatus.current_epoch) {
+                return Math.min(100, Math.round((this.runStatus.current_epoch / this.runStatus.epochs) * 100));
+            }
+            return 0;
+        }
+    }));
 });
 

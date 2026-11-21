@@ -151,3 +151,48 @@ class FailuresResponse(BaseModel):
     failures: List[FailureItem]
 
 
+class TrainRequest(BaseModel):
+    """Payload to launch a fine-tuning subprocess."""
+    output_name: str = Field(..., pattern=r"^[A-Za-z0-9_-]{1,64}$", description="Target adapter folder name")
+    epochs: int = Field(3, ge=1, le=10, description="Training epochs (1 to 10)")
+    batch_size: int = Field(4, ge=1, le=4, description="Per-device batch size (1 to 4)")
+    learning_rate: float = Field(2e-4, ge=1e-6, le=1e-3, description="Learning rate (1e-6 to 1e-3)")
+    grad_accum: int = Field(2, ge=1, le=8, description="Gradient accumulation steps (1 to 8)")
+    data_path: Optional[str] = Field(None, description="Optional custom JSONL dataset path")
+
+
+class TrainRunStatus(BaseModel):
+    """Status and progress metrics for a training run."""
+    run_id: str
+    output_name: str
+    status: Literal["idle", "running", "completed", "failed", "cancelled"]
+    epochs: int
+    batch_size: int
+    learning_rate: float
+    grad_accum: int
+    current_epoch: Optional[float] = None
+    current_step: Optional[int] = None
+    total_steps: Optional[int] = None
+    current_loss: Optional[float] = None
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    exit_code: Optional[int] = None
+    error: Optional[str] = None
+    output_dir: str
+    log_lines: List[str] = []
+
+
+class TrainProgressEvent(BaseModel):
+    """SSE event payload for training logs and progress."""
+    run_id: str
+    type: Literal["log", "progress", "status"]
+    status: str
+    line: Optional[str] = None
+    epoch: Optional[float] = None
+    step: Optional[int] = None
+    total_steps: Optional[int] = None
+    loss: Optional[float] = None
+    percent: Optional[float] = None
+
+
+
