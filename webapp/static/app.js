@@ -3,7 +3,7 @@
  * Phase 2: Interactive correction UI with character-level diff visualization.
  */
 
-document.addEventListener('alpine:init', () => {
+function registerAllComponents() {
     // Top-level Application State
     Alpine.data('appState', () => ({
         // Navigation & Routing
@@ -1115,5 +1115,11 @@ document.addEventListener('alpine:init', () => {
             return 0;
         }
     }));
-});
+}
+
+if (window.Alpine) {
+    registerAllComponents();
+} else {
+    document.addEventListener('alpine:init', registerAllComponents);
+}
 

@@ -139,7 +139,7 @@ Before sharing this repository:
 
 ## 8. Web Application (UI & API)
 
-A local web application providing an interactive character-diff correction UI and REST API.
+A local web application providing an interactive correction interface, batched file processing with live Server-Sent Events (SSE), an evaluation analytics dashboard, and a LoRA fine-tuning subprocess manager with GPU safety guards.
 
 ### Running the Web Server
 Launch the server via the batch script:
@@ -150,9 +150,39 @@ Or with Uvicorn:
 ```powershell
 .\venv\Scripts\python -m uvicorn webapp.main:app --host 127.0.0.1 --port 8000
 ```
-- Web UI: http://127.0.0.1:8000
-- Interactive Swagger API docs: http://127.0.0.1:8000/docs
-- Health API: http://127.0.0.1:8000/api/health
+- **Web UI**: http://127.0.0.1:8000
+- **Interactive Swagger API Docs**: http://127.0.0.1:8000/docs
+- **Health API**: http://127.0.0.1:8000/api/health
+
+### Web Application Features
+
+1. **Interactive Correction (Tab 1 — Correct)**:
+   - Real-time character diff visualization using `difflib.SequenceMatcher` opcodes (green for insertions/replacements, red for deletions/replacements).
+   - Hotkey support (`Ctrl+Enter` / `Cmd+Enter`), character counters, and sample pre-fill buttons.
+   - Dynamic PEFT adapter switching with in-place adapter swapping and lazy loading.
+   - VRAM usage and generation latency badges.
+
+2. **Batch File Processing (Tab 2 — Batch)**:
+   - Supports `.txt` (one sentence per line), `.csv` (automatic header detection, UTF-8 with BOM), and `.jsonl` uploads.
+   - Interactive column/field selector for CSV and JSONL files.
+   - Real-time SSE progress streaming: processed rows, percentage, rows/sec, and dynamic ETA calculation.
+   - Crash-resilient resumable processing (skips already evaluated rows in `results.jsonl`).
+   - 10-row preview table with character-level diffs and one-click export to CSV (Excel compatible) or JSONL.
+
+3. **Evaluation Analytics (Tab 3 — Analytics)**:
+   - Read-only inspection of the 14,549-row evaluation benchmark (`data/ocr_eval_checkpoint.jsonl`).
+   - In-memory mtime/size caching serving sub-5ms responses.
+   - Executive metrics breakdown: Total Rows (14,549), Exact-Match Accuracy (90.70%), Math Accuracy (98.41%), and Text Accuracy (51.48%).
+   - Character confusion matrix heatmap rendered as an interactive CSS grid with intensity scaling, hover tooltips, and click-to-filter capability.
+   - Failures explorer with debounced keyword search, domain filters, pagination, and side-by-side ground truth vs. model prediction diffs.
+
+4. **Fine-Tuning Runner & Monitor (Tab 4 — Training)**:
+   - Subprocess execution of `train.py` using virtual environment Python with process group isolation.
+   - 4GB VRAM safety preflight: unloads the inference model from GPU memory and locks inference endpoints (returns `503 {"reason": "training_in_progress"}`).
+   - Parameter bounds enforcement: epochs (1–10), batch size (1–4), learning rate ($10^{-6}$ to $10^{-3}$), and regex-validated target adapter directory names.
+   - Live console terminal window streaming stdout/stderr via SSE with auto-scroll toggles and ANSI code stripping.
+   - Process tree termination via `taskkill /F /T` with zero orphaned `python.exe` processes.
+   - Past runs history viewer and automatic adapter catalog refresh upon completion.
 
 ### Rebuilding Tailwind CSS (Optional)
 The pre-compiled CSS bundle is already committed at `webapp/static/css/tailwind.css`. No Node.js or npm is required at runtime.
@@ -165,4 +195,5 @@ If you modify `index.html` or `app.js` and wish to rebuild the stylesheet:
    ```cmd
    webapp\static\build_css.bat
    ```
+
 

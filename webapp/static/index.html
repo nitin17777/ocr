@@ -8,11 +8,11 @@
     <!-- Pre-compiled, committed standalone Tailwind CSS (No CDN at runtime) -->
     <link rel="stylesheet" href="/static/css/tailwind.css">
 
+    <!-- Alpine Application State (must load before Alpine initializes) -->
+    <script defer src="/static/app.js"></script>
+
     <!-- Vendored Alpine.js v3.14.8 (No CDN at runtime) -->
     <script defer src="/static/vendor/alpine.min.js"></script>
-
-    <!-- Alpine Application State -->
-    <script defer src="/static/app.js"></script>
 </head>
 <body x-data="appState" class="min-h-full flex flex-col bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans antialiased selection:bg-indigo-500 selection:text-white transition-colors duration-200">
 
