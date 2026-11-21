@@ -2,7 +2,22 @@
 
 A local, reproducible Python framework to evaluate and benchmark the `deep1104/ocr-lora-large` LoRA adapter on `Qwen/Qwen2.5-1.5B-Instruct` for synthetic OCR error correction.
 
-> 📊 **Comprehensive Benchmarks & Efficiency Report**: Detailed evaluation metrics (90.70% overall, 98.41% math), VRAM profiles, latency measurements, and adapter ablation comparisons are documented in **[BENCHMARKS.md](BENCHMARKS.md)**.
+---
+
+## 🚀 Key Benchmark Highlights
+
+| Metric | Result | Benchmark Details |
+| :--- | :--- | :--- |
+| **Overall Accuracy** | **90.70%** | Exact match across 14,549 frozen test sentences (`data/ocr_eval_checkpoint.jsonl`) |
+| **Math Accuracy** | **98.41%** | 11,965 / 12,158 correct on arithmetic expressions and equations |
+| **Over-Correction Rate** | **0.00%** | Zero false edits on clean, uncorrupted inputs |
+| **Hardware Target** | **4 GB VRAM** | Runs locally on consumer GPUs (tested on NVIDIA RTX 2050 4GB) |
+| **Inference Latency** | **85 – 180 ms** | Fast single-sentence correction (45 – 65 tokens/sec) |
+| **Batch Throughput** | **35 – 55 rows/s** | Batched file processing with live Server-Sent Events (SSE) progress |
+| **Memory Stability** | **0.0 MB Delta** | In-place PEFT adapter swapping with zero VRAM leaks across 10+ swaps |
+| **Parameter Efficiency** | **~1.19%** | Fine-tunes only 18.4M parameters on top of the 1.54B Qwen2.5 base model |
+
+> 📊 **Full Evaluation & Efficiency Report**: Detailed domain stratifications, noise-level benchmarks, character confusion matrices, and ablation studies are available in **[BENCHMARKS.md](BENCHMARKS.md)**.
 
 ---
 
